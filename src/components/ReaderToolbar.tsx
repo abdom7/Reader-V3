@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useRef } from "react";
-import { motion } from "framer-motion";
+import { useEffect, useRef, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import {
   ChevronLeft,
   ChevronRight,
@@ -9,7 +9,6 @@ import {
   ZoomOut,
   Clock,
   Shield,
-  Eye,
   Maximize2,
   X,
   Sun,
@@ -18,11 +17,29 @@ import {
   PenTool,
   StickyNote,
   LayoutDashboard,
+  Keyboard,
 } from "lucide-react";
 import { useReaderStore, ReadingMode } from "@/lib/store";
 import { useDrawingStore } from "@/lib/drawingStore";
 import { useNotesStore } from "@/lib/notesStore";
 import { NotionSyncButton } from "./NotionSync";
+
+export function toggleFullscreen() {
+  if (!document.fullscreenElement) {
+    document.documentElement.requestFullscreen().catch(() => {
+      /* ignore errors */
+    });
+  } else {
+    document.exitFullscreen().catch(() => {
+      /* ignore errors */
+    });
+  }
+}
+
+type HotkeyHint = {
+  keys: string;
+  description: string;
+};
 
 function NotesToggle() {
   const { isNotesPanelOpen, toggleNotesPanel, notes } = useNotesStore();
@@ -88,7 +105,11 @@ function DrawingToggle() {
   );
 }
 
-export function ReaderToolbar() {
+interface ReaderToolbarProps {
+  hotkeys?: HotkeyHint[];
+}
+
+export function ReaderToolbar({ hotkeys = [] }: ReaderToolbarProps) {
   const {
     currentPage,
     totalPages,
@@ -108,6 +129,7 @@ export function ReaderToolbar() {
   } = useReaderStore();
 
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const [showHotkeys, setShowHotkeys] = useState(false);
 
   // Timer logic
   useEffect(() => {
@@ -148,11 +170,7 @@ export function ReaderToolbar() {
   const progress = timer.elapsedSeconds / (timer.targetMinutes * 60);
 
   const handleFullscreen = () => {
-    if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen();
-    } else {
-      document.exitFullscreen();
-    }
+    toggleFullscreen();
   };
 
   const handleExit = () => {
@@ -175,12 +193,62 @@ export function ReaderToolbar() {
     setReadingMode(cycleModes[(idx + 1) % cycleModes.length]);
   };
 
+  const formatKeySegment = (segment: string) => {
+    const normalized = segment.trim();
+    const lower = normalized.toLowerCase();
+
+    switch (lower) {
+      case "arrow left":
+        return { display: "←", label: "Arrow Left" };
+      case "arrow right":
+        return { display: "→", label: "Arrow Right" };
+      case "arrow up":
+        return { display: "↑", label: "Arrow Up" };
+      case "arrow down":
+        return { display: "↓", label: "Arrow Down" };
+      case "space":
+        return { display: "Space", label: "Spacebar" };
+      case "enter":
+        return { display: "Enter", label: "Enter" };
+      default: {
+        const display =
+          normalized.length === 1
+            ? normalized.toUpperCase()
+            : normalized
+                .split(" ")
+                .map((word) =>
+                  word.length > 1
+                    ? word[0].toUpperCase() + word.slice(1).toLowerCase()
+                    : word.toUpperCase()
+                )
+                .join(" ");
+        return { display, label: normalized };
+      }
+    }
+  };
+
+  const renderKeySegments = (keys: string) => {
+    return keys.split("+").map((rawSegment, index) => {
+      const { display, label } = formatKeySegment(rawSegment);
+      return (
+        <span
+          key={`${label}-${index}`}
+          aria-label={label}
+          className="inline-flex min-w-[34px] items-center justify-center rounded-lg border border-white/12 bg-white/8 px-2 py-1 text-[11px] font-mono tracking-[0.18em] text-white/70 shadow-inner shadow-black/20"
+        >
+          {display}
+        </span>
+      );
+    });
+  };
+
   return (
-    <motion.div
-      initial={{ opacity: 0, y: -20 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-4 py-2 bg-space-deep/90 backdrop-blur-xl border-b border-space-border/30"
-    >
+    <>
+      <motion.div
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-4 py-2 bg-space-deep/90 backdrop-blur-xl border-b border-space-border/30"
+      >
       {/* Left: Navigation */}
       <div className="flex items-center gap-2">
         <button
@@ -296,6 +364,20 @@ export function ReaderToolbar() {
 
         <NotionSyncButton variant="compact" />
 
+        {hotkeys.length > 0 && (
+          <button
+            onClick={() => setShowHotkeys((value) => !value)}
+            className={`p-2 rounded-lg transition-colors ${
+              showHotkeys
+                ? "bg-gold-500/20 text-gold-300"
+                : "hover:bg-white/5 text-white/60 hover:text-white"
+            }`}
+            title="Keyboard Shortcuts"
+          >
+            <Keyboard className="w-4 h-4" />
+          </button>
+        )}
+
         <button
           onClick={handleFullscreen}
           className="p-2 rounded-lg hover:bg-white/5 text-white/60 hover:text-white transition-colors"
@@ -304,6 +386,51 @@ export function ReaderToolbar() {
           <Maximize2 className="w-4 h-4" />
         </button>
       </div>
-    </motion.div>
+      </motion.div>
+
+      <AnimatePresence>
+        {showHotkeys && hotkeys.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            transition={{ duration: 0.18, ease: "easeOut" }}
+            className="fixed right-4 top-16 z-50 w-80 max-w-full rounded-2xl border border-space-border/60 bg-space-deep/96 backdrop-blur-2xl shadow-xl shadow-black/30"
+          >
+            <div className="flex items-start justify-between px-4 py-3 border-b border-space-border/45">
+              <div>
+                <p className="text-[10px] uppercase tracking-[0.32em] text-white/55">
+                  Hotkeys
+                </p>
+                <p className="mt-1 text-[12px] text-white/35">
+                  Quick controls for Infinity Reader
+                </p>
+              </div>
+              <button
+                onClick={() => setShowHotkeys(false)}
+                className="text-[11px] text-white/40 hover:text-white/70 transition-colors"
+              >
+                Close
+              </button>
+            </div>
+            <ul className="divide-y divide-space-border/35">
+              {hotkeys.map((item, index) => (
+                <li
+                  key={`${item.keys}-${index}`}
+                  className="grid grid-cols-[auto,1fr] items-center gap-3 px-4 py-3"
+                >
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {renderKeySegments(item.keys)}
+                  </div>
+                  <p className="text-[12px] text-white/45 leading-relaxed">
+                    {item.description}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </>
   );
 }
