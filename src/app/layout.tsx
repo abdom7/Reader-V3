@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { Inter, Space_Grotesk, JetBrains_Mono, Cinzel } from "next/font/google";
-import { Analytics } from "@vercel/analytics/react";
 import "./globals.css";
 
 const inter = Inter({
@@ -49,7 +48,6 @@ export default function RootLayout({
         className={`min-h-screen bg-space-black ${inter.variable} ${spaceGrotesk.variable} ${jetbrainsMono.variable} ${cinzel.variable}`}
       >
         {children}
-        <Analytics />
       </body>
     </html>
   );
