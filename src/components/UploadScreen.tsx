@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Image from "next/image";
 import { motion } from "framer-motion";
 import {
   Upload,
@@ -433,6 +434,32 @@ export function UploadScreen() {
             </motion.div>
           </div>
         </motion.main>
+
+        {/* Powered by Infinity Blocks */}
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, delay: 0.4 }}
+          className="pb-4 flex items-center justify-center"
+        >
+          <a
+            href="https://infinityblocks.com"
+            target="_blank"
+            rel="noreferrer noopener"
+            className="group inline-flex items-center gap-2 rounded-full border border-space-border/60 bg-space-black/30 px-3 py-1.5 text-[11px] text-white/40 hover:text-white/70 hover:border-gold-500/40 transition-colors"
+            title="Powered by Infinity Blocks"
+          >
+            <span className="uppercase tracking-widest">Powered by</span>
+            <Image
+              src="/infinity-blocks.png"
+              alt="Infinity Blocks"
+              width={18}
+              height={18}
+              className="rounded-sm opacity-80 group-hover:opacity-100"
+              priority
+            />
+          </a>
+        </motion.div>
 
         {/* ── Sticky Launch Bar ── */}
         <motion.div
