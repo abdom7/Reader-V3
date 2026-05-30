@@ -110,3 +110,5 @@ To embed in Notion:
 ---
 
 *Built with focus, for focus.* — Infinity Blocks
+
+<!-- V3 Trigger -->
