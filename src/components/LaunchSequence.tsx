@@ -45,10 +45,8 @@ export function LaunchSequence() {
         
         await page.render({ canvasContext: ctx, viewport }).promise;
         
-        if (isCancelled) return;
-
         const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.8));
-        if (!blob || isCancelled) return;
+        if (!blob) return;
 
         const safeName = (bookTitle || "cover").replace(/[^a-z0-9]/gi, '_').toLowerCase();
         const coverFile = new File([blob], `${safeName}-cover.jpg`, { type: "image/jpeg" });
@@ -58,16 +56,13 @@ export function LaunchSequence() {
           handleUploadUrl: "/api/upload",
         });
         
-        if (!isCancelled) {
-          setUploadedCoverUrl(uploadedCover.url);
-        }
+        setUploadedCoverUrl(uploadedCover.url);
       } catch (err) {
         console.error("Failed to generate and upload cover:", err);
       }
     };
 
     generateCover();
-    return () => { isCancelled = true; };
   }, [pdfUrl, uploadedCoverUrl, coverGenerating, setUploadedCoverUrl, bookTitle]);
 
   useEffect(() => {
