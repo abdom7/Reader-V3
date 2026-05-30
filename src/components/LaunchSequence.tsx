@@ -7,6 +7,8 @@ import { useReaderStore } from "@/lib/store";
 import { Starfield } from "./Starfield";
 import { upload } from "@vercel/blob/client";
 
+const ENABLE_BLOB_UPLOADS = false; // Set to true to enable cover uploads to Vercel Blob
+
 const COUNTDOWN_MESSAGES = [
   "Preparing your reading capsule...",
   "Eliminating distractions...",
@@ -49,14 +51,17 @@ export function LaunchSequence() {
         if (!blob) return;
 
         const safeName = (bookTitle || "cover").replace(/[^a-z0-9]/gi, '_').toLowerCase();
-        const coverFile = new File([blob], `${safeName}-cover.jpg`, { type: "image/jpeg" });
         
-        const uploadedCover = await upload(coverFile.name, coverFile, {
-          access: "public",
-          handleUploadUrl: "/api/upload",
-        });
-        
-        setUploadedCoverUrl(uploadedCover.url);
+        if (ENABLE_BLOB_UPLOADS) {
+          const coverFile = new File([blob], `${safeName}-cover.jpg`, { type: "image/jpeg" });
+          
+          const uploadedCover = await upload(coverFile.name, coverFile, {
+            access: "public",
+            handleUploadUrl: "/api/upload",
+          });
+          
+          setUploadedCoverUrl(uploadedCover.url);
+        }
       } catch (err) {
         console.error("Failed to generate and upload cover:", err);
       }

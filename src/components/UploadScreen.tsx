@@ -25,6 +25,8 @@ import { Starfield } from "./Starfield";
 import { NotionSettings } from "./NotionSettings";
 import { upload } from "@vercel/blob/client";
 
+const ENABLE_BLOB_UPLOADS = false; // Set to true to enable PDF uploads to Vercel Blob
+
 const READING_MODES: {
   id: ReadingMode;
   label: string;
@@ -134,27 +136,29 @@ export function UploadScreen() {
         setFileName(file.name);
         clearDailyRecommendation();
 
-        // Delete previous upload if exists
-        const currentUploadedUrl = useReaderStore.getState().uploadedPdfUrl;
-        if (currentUploadedUrl) {
-          fetch('/api/upload', {
-            method: 'DELETE',
-            body: JSON.stringify({ url: currentUploadedUrl }),
-          }).catch(console.error);
-          setUploadedPdfUrl(null);
-        }
+        if (ENABLE_BLOB_UPLOADS) {
+          // Delete previous upload if exists
+          const currentUploadedUrl = useReaderStore.getState().uploadedPdfUrl;
+          if (currentUploadedUrl) {
+            fetch('/api/upload', {
+              method: 'DELETE',
+              body: JSON.stringify({ url: currentUploadedUrl }),
+            }).catch(console.error);
+            setUploadedPdfUrl(null);
+          }
 
-        setIsUploading(true);
-        try {
-          const newBlob = await upload(file.name, file, {
-            access: 'public',
-            handleUploadUrl: '/api/upload',
-          });
-          setUploadedPdfUrl(newBlob.url);
-        } catch (e) {
-          console.error("Failed to upload to vercel blob", e);
-        } finally {
-          setIsUploading(false);
+          setIsUploading(true);
+          try {
+            const newBlob = await upload(file.name, file, {
+              access: 'public',
+              handleUploadUrl: '/api/upload',
+            });
+            setUploadedPdfUrl(newBlob.url);
+          } catch (e) {
+            console.error("Failed to upload to vercel blob", e);
+          } finally {
+            setIsUploading(false);
+          }
         }
       }
     },
@@ -287,20 +291,22 @@ export function UploadScreen() {
   };
 
   const clearFile = useCallback(() => {
-    const state = useReaderStore.getState();
-    if (state.uploadedPdfUrl) {
-      fetch('/api/upload', {
-        method: 'DELETE',
-        body: JSON.stringify({ url: state.uploadedPdfUrl }),
-      }).catch(console.error);
-      setUploadedPdfUrl(null);
-    }
-    if (state.uploadedCoverUrl) {
-      fetch('/api/upload', {
-        method: 'DELETE',
-        body: JSON.stringify({ url: state.uploadedCoverUrl }),
-      }).catch(console.error);
-      state.setUploadedCoverUrl(null);
+    if (ENABLE_BLOB_UPLOADS) {
+      const state = useReaderStore.getState();
+      if (state.uploadedPdfUrl) {
+        fetch('/api/upload', {
+          method: 'DELETE',
+          body: JSON.stringify({ url: state.uploadedPdfUrl }),
+        }).catch(console.error);
+        setUploadedPdfUrl(null);
+      }
+      if (state.uploadedCoverUrl) {
+        fetch('/api/upload', {
+          method: 'DELETE',
+          body: JSON.stringify({ url: state.uploadedCoverUrl }),
+        }).catch(console.error);
+        state.setUploadedCoverUrl(null);
+      }
     }
     setFileName(null);
     setPdfFile(null);
