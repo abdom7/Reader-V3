@@ -17,7 +17,7 @@ import { NotionSettings } from "./NotionSettings";
 export function NotionSyncButton({ variant = "full" }: { variant?: "full" | "compact" }) {
   const { notionConfig, notes, syncStatus, setSyncStatus, setLastSyncedAt, markNotesSynced } =
     useNotesStore();
-  const { pdfFile, bookTitle, bookGenre, readingMode, timer, currentPage, totalPages, uploadedPdfUrl } =
+  const { pdfFile, bookTitle, bookGenre, readingMode, timer, currentPage, totalPages, uploadedPdfUrl, uploadedCoverUrl } =
     useReaderStore();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [syncedUrl, setSyncedUrl] = useState<string | null>(null);
@@ -53,6 +53,7 @@ export function NotionSyncButton({ variant = "full" }: { variant?: "full" | "com
           session: {
             pdfName: pdfFile?.name || "Untitled PDF",
             uploadedPdfUrl,
+            uploadedCoverUrl,
             bookTitle,
             genre: bookGenre || undefined,
             readingMode,

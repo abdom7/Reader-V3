@@ -29,6 +29,7 @@ interface ReaderState {
   pdfFile: File | null;
   pdfUrl: string | null;
   uploadedPdfUrl: string | null;
+  uploadedCoverUrl: string | null;
   bookTitle: string | null;
   bookGenre: string | null;
   currentPage: number;
@@ -45,6 +46,7 @@ interface ReaderState {
   setPdfFile: (file: File | null) => void;
   setPdfUrl: (url: string | null) => void;
   setUploadedPdfUrl: (url: string | null) => void;
+  setUploadedCoverUrl: (url: string | null) => void;
   setBookTitle: (title: string | null) => void;
   setBookGenre: (genre: string | null) => void;
   setCurrentPage: (page: number) => void;
@@ -68,6 +70,7 @@ const initialState = {
   pdfFile: null,
   pdfUrl: null,
   uploadedPdfUrl: null,
+  uploadedCoverUrl: null,
   bookTitle: null,
   bookGenre: null,
   currentPage: 1,
@@ -92,6 +95,7 @@ export const useReaderStore = create<ReaderState>((set) => ({
   setPdfFile: (file) => set({ pdfFile: file }),
   setPdfUrl: (url) => set({ pdfUrl: url }),
   setUploadedPdfUrl: (url) => set({ uploadedPdfUrl: url }),
+  setUploadedCoverUrl: (url) => set({ uploadedCoverUrl: url }),
   setBookTitle: (title) => set({ bookTitle: title }),
   setBookGenre: (genre) => set({ bookGenre: genre }),
   setCurrentPage: (page) => set({ currentPage: page }),

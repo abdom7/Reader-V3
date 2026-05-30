@@ -287,13 +287,20 @@ export function UploadScreen() {
   };
 
   const clearFile = useCallback(() => {
-    const currentUploadedUrl = useReaderStore.getState().uploadedPdfUrl;
-    if (currentUploadedUrl) {
+    const state = useReaderStore.getState();
+    if (state.uploadedPdfUrl) {
       fetch('/api/upload', {
         method: 'DELETE',
-        body: JSON.stringify({ url: currentUploadedUrl }),
+        body: JSON.stringify({ url: state.uploadedPdfUrl }),
       }).catch(console.error);
       setUploadedPdfUrl(null);
+    }
+    if (state.uploadedCoverUrl) {
+      fetch('/api/upload', {
+        method: 'DELETE',
+        body: JSON.stringify({ url: state.uploadedCoverUrl }),
+      }).catch(console.error);
+      state.setUploadedCoverUrl(null);
     }
     setFileName(null);
     setPdfFile(null);

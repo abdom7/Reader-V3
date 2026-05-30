@@ -19,6 +19,7 @@ interface SyncPayload {
   session: {
     pdfName: string;
     uploadedPdfUrl?: string | null;
+    uploadedCoverUrl?: string | null;
     bookTitle?: string;
     readingMode: string;
     durationMinutes: number;
@@ -194,6 +195,18 @@ async function upsertBook(
           name: session.pdfName,
           type: "external",
           external: { url: session.uploadedPdfUrl },
+        },
+      ],
+    };
+  }
+
+  if (session.uploadedCoverUrl) {
+    bookProperties["Cover"] = {
+      files: [
+        {
+          name: "Cover",
+          type: "external",
+          external: { url: session.uploadedCoverUrl },
         },
       ],
     };

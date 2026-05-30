@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Rocket, Sparkles } from "lucide-react";
 import { useReaderStore } from "@/lib/store";
 import { Starfield } from "./Starfield";
+import { upload } from "@vercel/blob/client";
 
 const COUNTDOWN_MESSAGES = [
   "Preparing your reading capsule...",
@@ -14,10 +15,60 @@ const COUNTDOWN_MESSAGES = [
 ];
 
 export function LaunchSequence() {
-  const { setPhase, timer } = useReaderStore();
+  const { setPhase, timer, pdfUrl, uploadedCoverUrl, setUploadedCoverUrl, bookTitle } = useReaderStore();
   const [countdown, setCountdown] = useState(5);
   const [messageIndex, setMessageIndex] = useState(0);
   const [warpActive, setWarpActive] = useState(false);
+  const [coverGenerating, setCoverGenerating] = useState(false);
+
+  useEffect(() => {
+    if (!pdfUrl || uploadedCoverUrl || coverGenerating) return;
+
+    setCoverGenerating(true);
+    let isCancelled = false;
+
+    const generateCover = async () => {
+      try {
+        const pdfjsLib = await import("pdfjs-dist");
+        pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
+
+        const doc = await pdfjsLib.getDocument(pdfUrl).promise;
+        const page = await doc.getPage(1);
+        
+        const viewport = page.getViewport({ scale: 0.8 });
+        const canvas = document.createElement("canvas");
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return;
+
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+        
+        await page.render({ canvasContext: ctx, viewport }).promise;
+        
+        if (isCancelled) return;
+
+        const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.8));
+        if (!blob || isCancelled) return;
+
+        const safeName = (bookTitle || "cover").replace(/[^a-z0-9]/gi, '_').toLowerCase();
+        const coverFile = new File([blob], `${safeName}-cover.jpg`, { type: "image/jpeg" });
+        
+        const uploadedCover = await upload(coverFile.name, coverFile, {
+          access: "public",
+          handleUploadUrl: "/api/upload",
+        });
+        
+        if (!isCancelled) {
+          setUploadedCoverUrl(uploadedCover.url);
+        }
+      } catch (err) {
+        console.error("Failed to generate and upload cover:", err);
+      }
+    };
+
+    generateCover();
+    return () => { isCancelled = true; };
+  }, [pdfUrl, uploadedCoverUrl, coverGenerating, setUploadedCoverUrl, bookTitle]);
 
   useEffect(() => {
     if (countdown <= 0) {
