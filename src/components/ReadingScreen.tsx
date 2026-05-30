@@ -20,7 +20,6 @@ export function ReadingScreen() {
     zoom,
     setZoom,
     currentPage,
-    totalPages,
     focusModeActive,
     toggleFocusMode,
   } = useReaderStore((state) => ({
@@ -29,7 +28,6 @@ export function ReadingScreen() {
     zoom: state.zoom,
     setZoom: state.setZoom,
     currentPage: state.currentPage,
-    totalPages: state.totalPages,
     focusModeActive: state.focusModeActive,
     toggleFocusMode: state.toggleFocusMode,
   }));

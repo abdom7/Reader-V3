@@ -63,14 +63,16 @@ export default function Home() {
     message: string;
   } | null>(null);
 
-  // Handle Notion OAuth callback params
+  // Handle Notion OAuth callback params.
+  // The token is stored server-side in an HttpOnly cookie by the callback route.
+  // Only non-sensitive config (db IDs) arrives via URL params.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
 
-    const notionToken = params.get("notion_token");
     const booksDatabaseId = params.get("notion_books_db");
     const notesDatabaseId = params.get("notion_notes_db");
     const notionError = params.get("notion_error");
+    const bookTemplateId = params.get("notion_book_template");
 
     if (notionError) {
       setToast({ type: "error", message: notionError });
@@ -78,12 +80,12 @@ export default function Home() {
       return;
     }
 
-    if (notionToken && booksDatabaseId && notesDatabaseId) {
+    if (booksDatabaseId && notesDatabaseId) {
       setNotionConfig({
-        token: notionToken,
         booksDatabaseId,
         notesDatabaseId,
         connected: true,
+        ...(bookTemplateId ? { bookTemplateId } : {}),
       });
       setToast({
         type: "success",

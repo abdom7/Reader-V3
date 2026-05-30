@@ -3,6 +3,19 @@ import { create } from "zustand";
 export type ReadingMode = "deep-space" | "low-light" | "focus";
 export type AppPhase = "launch" | "upload" | "countdown" | "reading";
 
+type RecommendationSource = "notion" | "fallback";
+
+export interface DailyRecommendation {
+  source: RecommendationSource;
+  pages: number | null;
+  text?: string | null;
+  missingDeadline?: boolean;
+  raw?: string | null;
+  timestamp: number;
+}
+
+type DailyRecommendationInput = Omit<DailyRecommendation, "timestamp">;
+
 interface TimerState {
   targetMinutes: number;
   elapsedSeconds: number;
@@ -15,12 +28,15 @@ interface ReaderState {
   focusModeActive: boolean;
   pdfFile: File | null;
   pdfUrl: string | null;
+  uploadedPdfUrl: string | null;
   bookTitle: string | null;
+  bookGenre: string | null;
   currentPage: number;
   totalPages: number;
   zoom: number;
   timer: TimerState;
   sidebarOpen: boolean;
+  dailyRecommendation: DailyRecommendation | null;
 
   // Actions
   setPhase: (phase: AppPhase) => void;
@@ -28,7 +44,9 @@ interface ReaderState {
   toggleFocusMode: () => void;
   setPdfFile: (file: File | null) => void;
   setPdfUrl: (url: string | null) => void;
+  setUploadedPdfUrl: (url: string | null) => void;
   setBookTitle: (title: string | null) => void;
+  setBookGenre: (genre: string | null) => void;
   setCurrentPage: (page: number) => void;
   setTotalPages: (total: number) => void;
   setZoom: (zoom: number) => void;
@@ -39,6 +57,8 @@ interface ReaderState {
   resetTimer: () => void;
   toggleSidebar: () => void;
   reset: () => void;
+  setDailyRecommendation: (recommendation: DailyRecommendationInput | null) => void;
+  clearDailyRecommendation: () => void;
 }
 
 const initialState = {
@@ -47,7 +67,9 @@ const initialState = {
   focusModeActive: false,
   pdfFile: null,
   pdfUrl: null,
+  uploadedPdfUrl: null,
   bookTitle: null,
+  bookGenre: null,
   currentPage: 1,
   totalPages: 0,
   zoom: 100,
@@ -57,6 +79,7 @@ const initialState = {
     isRunning: false,
   },
   sidebarOpen: false,
+  dailyRecommendation: null as DailyRecommendation | null,
 };
 
 export const useReaderStore = create<ReaderState>((set) => ({
@@ -68,7 +91,9 @@ export const useReaderStore = create<ReaderState>((set) => ({
     set((state) => ({ focusModeActive: !state.focusModeActive })),
   setPdfFile: (file) => set({ pdfFile: file }),
   setPdfUrl: (url) => set({ pdfUrl: url }),
+  setUploadedPdfUrl: (url) => set({ uploadedPdfUrl: url }),
   setBookTitle: (title) => set({ bookTitle: title }),
+  setBookGenre: (genre) => set({ bookGenre: genre }),
   setCurrentPage: (page) => set({ currentPage: page }),
   setTotalPages: (total) => set({ totalPages: total }),
   setZoom: (zoom) => set({ zoom: Math.max(50, Math.min(200, zoom)) }),
@@ -87,5 +112,12 @@ export const useReaderStore = create<ReaderState>((set) => ({
       timer: { ...state.timer, elapsedSeconds: 0, isRunning: false },
     })),
   toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
+  setDailyRecommendation: (recommendation) =>
+    set({
+      dailyRecommendation: recommendation
+        ? { ...recommendation, timestamp: Date.now() }
+        : null,
+    }),
+  clearDailyRecommendation: () => set({ dailyRecommendation: null }),
   reset: () => set(initialState),
 }));

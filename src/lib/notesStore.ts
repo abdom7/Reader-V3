@@ -13,10 +13,10 @@ export interface Note {
 }
 
 export interface NotionConfig {
-  token: string;
   booksDatabaseId: string;
   notesDatabaseId: string;
   connected: boolean;
+  bookTemplateId?: string;
 }
 
 export type SyncStatus = "idle" | "syncing" | "synced" | "error";
@@ -55,10 +55,10 @@ let noteIdCounter = 0;
 const generateNoteId = () => `note-${Date.now()}-${++noteIdCounter}`;
 
 const defaultNotionConfig: NotionConfig = {
-  token: "",
   booksDatabaseId: "",
   notesDatabaseId: "",
   connected: false,
+  bookTemplateId: "",
 };
 
 const loadNotionConfig = (): NotionConfig => {

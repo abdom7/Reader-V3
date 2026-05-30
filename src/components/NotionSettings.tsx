@@ -3,8 +3,9 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Check, Unlink } from "lucide-react";
+import { X, Check, Unlink, Database } from "lucide-react";
 import { useNotesStore } from "@/lib/notesStore";
+import { NotionDatabasePicker } from "./NotionDatabasePicker";
 
 function NotionIcon({ size = 16 }: { size?: number }) {
   return (
@@ -30,106 +31,182 @@ export function NotionSettings({
 }) {
   const { notionConfig, clearNotionConfig } = useNotesStore();
   const [mounted, setMounted] = useState(false);
+  const [disconnecting, setDisconnecting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   useEffect(() => {
     setMounted(true);
   }, []);
 
   const handleOAuth = () => {
+    setError(null);
+    setWarning(null);
     window.location.href = "/api/notion/auth";
   };
 
-  const handleDisconnect = () => {
-    clearNotionConfig();
+  const handleDisconnect = async () => {
+    setError(null);
+    setWarning(null);
+    setDisconnecting(true);
+
+    let warningMessage: string | null = null;
+
+    try {
+      const res = await fetch("/api/notion/disconnect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok || data?.success === false) {
+        throw new Error(
+          data?.error || data?.message || "Failed to revoke Notion access token"
+        );
+      }
+
+      if (data?.warning) {
+        warningMessage = data.warning;
+      }
+
+      clearNotionConfig();
+      setWarning(warningMessage);
+      if (!warningMessage) {
+        onClose();
+      }
+      setError(null);
+    } catch (err) {
+      clearNotionConfig();
+      setError(err instanceof Error ? err.message : "Failed to disconnect from Notion");
+    } finally {
+      setDisconnecting(false);
+    }
   };
 
   if (!mounted) return null;
 
-  return createPortal(
-    <AnimatePresence>
-      {isOpen && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          className="fixed inset-0 z-[9999] bg-space-deep/90 backdrop-blur-xl flex items-center justify-center p-4"
-          onClick={onClose}
-        >
-          <motion.div
-            initial={{ scale: 0.9, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            exit={{ scale: 0.9, opacity: 0 }}
-            onClick={(e) => e.stopPropagation()}
-            className="glass-panel p-6 max-w-md w-full"
-          >
-            {/* Header */}
-            <div className="flex items-center justify-between mb-6">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-lg bg-white flex items-center justify-center">
-                  <NotionIcon />
-                </div>
-                <h3 className="text-base font-display font-medium text-white/90 tracking-wide">
-                  Notion Integration
-                </h3>
-              </div>
-              <button
-                onClick={onClose}
-                title="Close"
-                className="p-1.5 rounded-lg hover:bg-white/5 text-white/40 hover:text-white transition-colors"
+  return (
+    <>
+      {createPortal(
+        <AnimatePresence>
+          {isOpen && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[9999] bg-space-deep/90 backdrop-blur-xl flex items-center justify-center p-4"
+              onClick={onClose}
+            >
+              <motion.div
+                initial={{ scale: 0.9, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.9, opacity: 0 }}
+                onClick={(e) => e.stopPropagation()}
+                className="glass-panel p-6 max-w-md w-full"
               >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            {notionConfig.connected ? (
-              <div className="space-y-4">
-                <div className="flex items-center gap-2 p-3 rounded-lg bg-green-500/10 border border-green-500/30">
-                  <Check className="w-4 h-4 text-green-400" />
-                  <div className="flex-1">
-                    <span className="text-xs text-green-400 font-medium">
-                      Connected to Notion
-                    </span>
-                    <p className="text-[10px] text-green-400/60 mt-0.5">
-                      Books & Notes databases linked
-                    </p>
+                {/* Header */}
+                <div className="flex items-center justify-between mb-6">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-lg bg-white flex items-center justify-center">
+                      <NotionIcon />
+                    </div>
+                    <h3 className="text-base font-display font-medium text-white/90 tracking-wide">
+                      Notion Integration
+                    </h3>
                   </div>
                   <button
-                    onClick={handleDisconnect}
-                    title="Disconnect Notion"
-                    className="text-[10px] text-white/40 hover:text-red-400 flex items-center gap-1 transition-colors"
+                    onClick={onClose}
+                    title="Close"
+                    className="p-1.5 rounded-lg hover:bg-white/5 text-white/40 hover:text-white transition-colors"
                   >
-                    <Unlink className="w-3 h-3" />
-                    Disconnect
+                    <X className="w-4 h-4" />
                   </button>
                 </div>
 
-                <button
-                  onClick={onClose}
-                  className="w-full btn-primary text-sm py-2.5"
-                >
-                  Done
-                </button>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                <button
-                  onClick={handleOAuth}
-                  className="w-full flex items-center justify-center gap-3 py-3 rounded-xl bg-white text-black font-medium text-sm hover:bg-white/90 transition-colors"
-                >
-                  <NotionIcon />
-                  Connect with Notion
-                </button>
+                {error && (
+                  <div className="rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs text-red-400 mb-4">
+                    {error}
+                  </div>
+                )}
 
-                <p className="text-[10px] text-white/30 text-center">
-                  Authorize Infinity Reader to access your Books &amp; Notes
-                  databases
-                </p>
-              </div>
-            )}
-          </motion.div>
-        </motion.div>
+                {warning && !error && (
+                  <div className="rounded-lg border border-gold-500/40 bg-gold-500/10 px-3 py-2 text-xs text-gold-200 mb-4">
+                    {warning}
+                  </div>
+                )}
+
+                {notionConfig.connected ? (
+                  <div className="space-y-3">
+                    {/* Connection status */}
+                    <div className="flex items-center gap-2 p-3 rounded-lg bg-green-500/10 border border-green-500/30">
+                      <Check className="w-4 h-4 text-green-400" />
+                      <div className="flex-1">
+                        <span className="text-xs text-green-400 font-medium">
+                          Connected to Notion
+                        </span>
+                        <p className="text-[10px] text-green-400/60 mt-0.5">
+                          Books &amp; Notes databases linked
+                        </p>
+                      </div>
+                      <button
+                        onClick={handleDisconnect}
+                        disabled={disconnecting}
+                        title="Disconnect Notion"
+                        className="text-[10px] text-white/40 hover:text-red-400 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1 transition-colors"
+                      >
+                        <Unlink className="w-3 h-3" />
+                        {disconnecting ? "Disconnecting..." : "Disconnect"}
+                      </button>
+                    </div>
+
+                    {/* Change databases */}
+                    <button
+                      onClick={() => setPickerOpen(true)}
+                      className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-space-border/60 text-xs text-white/50 hover:text-white hover:border-gold-500/40 transition-colors"
+                    >
+                      <Database className="w-3.5 h-3.5" />
+                      Change Database Selection
+                    </button>
+
+                    <button
+                      onClick={onClose}
+                      className="w-full btn-primary text-sm py-2.5"
+                    >
+                      Done
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <button
+                      onClick={handleOAuth}
+                      className="w-full flex items-center justify-center gap-3 py-3 rounded-xl bg-white text-black font-medium text-sm hover:bg-white/90 transition-colors"
+                    >
+                      <NotionIcon />
+                      Connect with Notion
+                    </button>
+
+                    <p className="text-[10px] text-white/30 text-center">
+                      Authorize Infinity Reader to access your Books &amp; Notes
+                      databases
+                    </p>
+                  </div>
+                )}
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>,
+        document.body
       )}
-    </AnimatePresence>,
-    document.body
+
+      {/* Database picker — opens as a separate modal on top */}
+      <NotionDatabasePicker
+        isOpen={pickerOpen}
+        onClose={() => setPickerOpen(false)}
+        onConnected={() => setPickerOpen(false)}
+      />
+    </>
   );
 }

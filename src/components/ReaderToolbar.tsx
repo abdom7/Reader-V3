@@ -18,6 +18,8 @@ import {
   StickyNote,
   LayoutDashboard,
   Keyboard,
+  Target,
+  Info,
 } from "lucide-react";
 import { useReaderStore, ReadingMode } from "@/lib/store";
 import { useDrawingStore } from "@/lib/drawingStore";
@@ -126,10 +128,20 @@ export function ReaderToolbar({ hotkeys = [] }: ReaderToolbarProps) {
     setReadingMode,
     setPhase,
     reset,
+    dailyRecommendation,
   } = useReaderStore();
 
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const [showHotkeys, setShowHotkeys] = useState(false);
+  const [showRecommendation, setShowRecommendation] = useState(true);
+
+  useEffect(() => {
+    if (dailyRecommendation) {
+      setShowRecommendation(true);
+    } else {
+      setShowRecommendation(false);
+    }
+  }, [dailyRecommendation?.timestamp]);
 
   // Timer logic
   useEffect(() => {
@@ -286,28 +298,66 @@ export function ReaderToolbar({ hotkeys = [] }: ReaderToolbarProps) {
         </button>
       </div>
 
-      {/* Center: Timer */}
-      <div className="flex items-center gap-3">
-        <div className="relative flex items-center gap-2 px-3 py-1.5 rounded-full bg-space-surface border border-space-border">
-          <Clock className="w-3.5 h-3.5 text-gold-500" />
-          <span className="text-sm font-mono text-gold-400">
-            {formatTime(remainingSeconds > 0 ? remainingSeconds : 0)}
-          </span>
-          {/* Progress bar */}
-          <div className="absolute bottom-0 left-0 h-0.5 rounded-full bg-gold-500/30 w-full overflow-hidden">
-            <div
-              className="h-full bg-gold-500 timer-progress"
-              style={{ width: `${Math.min(progress * 100, 100)}%` }}
-            />
+      {/* Center: Timer & Recommendation */}
+      <div className="flex flex-col gap-2">
+        <div className="flex items-center gap-3">
+          <div className="relative flex items-center gap-2 px-3 py-1.5 rounded-full bg-space-surface border border-space-border">
+            <Clock className="w-3.5 h-3.5 text-gold-500" />
+            <span className="text-sm font-mono text-gold-400">
+              {formatTime(remainingSeconds > 0 ? remainingSeconds : 0)}
+            </span>
+            {/* Progress bar */}
+            <div className="absolute bottom-0 left-0 h-0.5 rounded-full bg-gold-500/30 w-full overflow-hidden">
+              <div
+                className="h-full bg-gold-500 timer-progress"
+                style={{ width: `${Math.min(progress * 100, 100)}%` }}
+              />
+            </div>
           </div>
+
+          {focusModeActive && (
+            <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-gold-500/10 border border-gold-500/30">
+              <Shield className="w-3 h-3 text-gold-500" />
+              <span className="text-xs text-gold-400">Focus Active</span>
+            </div>
+          )}
         </div>
 
-        {focusModeActive && (
-          <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-gold-500/10 border border-gold-500/30">
-            <Shield className="w-3 h-3 text-gold-500" />
-            <span className="text-xs text-gold-400">Focus Active</span>
-          </div>
-        )}
+        <AnimatePresence>
+          {showRecommendation && dailyRecommendation && (
+            <motion.div
+              key={dailyRecommendation.timestamp}
+              initial={{ opacity: 0, y: -4 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -4 }}
+              transition={{ duration: 0.2, ease: "easeOut" }}
+              className="flex items-start gap-3 rounded-xl border border-gold-500/25 bg-gold-500/10 px-3 py-2 max-w-xs"
+            >
+              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gold-500/20 border border-gold-500/40 text-gold-200">
+                {dailyRecommendation.source === "notion" ? (
+                  <Target className="w-4 h-4" />
+                ) : (
+                  <Info className="w-4 h-4" />
+                )}
+              </div>
+              <div className="flex-1 text-[12px] leading-relaxed text-white/70">
+                <p className="font-semibold text-white/80">
+                  {dailyRecommendation.source === "notion"
+                    ? "Daily Pages"
+                    : "Smart goal"}
+                </p>
+                <p className="mt-0.5">{dailyRecommendation.text}</p>
+              </div>
+              <button
+                onClick={() => setShowRecommendation(false)}
+                className="mt-0.5 text-white/30 hover:text-white/60 transition-colors"
+                aria-label="Dismiss recommendation"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
       {/* Right: Controls */}

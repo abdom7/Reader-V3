@@ -10,19 +10,49 @@ export function PdfViewer() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [canvasSize, setCanvasSize] = useState<{ w: number; h: number }>({ w: 0, h: 0 });
   const [pdfDoc, setPdfDoc] = useState<any>(null);
+  const pdfDocRef = useRef<any>(null);
   const [rendering, setRendering] = useState(false);
   const renderTaskRef = useRef<any>(null);
 
   // Load PDF document
   useEffect(() => {
-    if (!pdfUrl) return;
+    if (!pdfUrl) {
+      if (pdfDocRef.current) {
+        try {
+          pdfDocRef.current.destroy();
+        } catch (err) {
+          console.warn("Failed to destroy PDF doc", err);
+        }
+        pdfDocRef.current = null;
+        setPdfDoc(null);
+      }
+      return;
+    }
+
+    let cancelled = false;
 
     const loadPdf = async () => {
       const pdfjsLib = await import("pdfjs-dist");
-      pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
+      pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
 
       try {
+        if (pdfDocRef.current) {
+          try {
+            pdfDocRef.current.destroy();
+          } catch (err) {
+            console.warn("Failed to destroy previous PDF doc", err);
+          }
+          pdfDocRef.current = null;
+          setPdfDoc(null);
+        }
+
         const doc = await pdfjsLib.getDocument(pdfUrl).promise;
+        if (cancelled) {
+          doc.destroy();
+          return;
+        }
+
+        pdfDocRef.current = doc;
         setPdfDoc(doc);
         setTotalPages(doc.numPages);
 
@@ -45,6 +75,23 @@ export function PdfViewer() {
     };
 
     loadPdf();
+
+    return () => {
+      cancelled = true;
+      if (renderTaskRef.current) {
+        renderTaskRef.current.cancel();
+        renderTaskRef.current = null;
+      }
+      if (pdfDocRef.current) {
+        try {
+          pdfDocRef.current.destroy();
+        } catch (err) {
+          console.warn("Failed to destroy PDF doc", err);
+        }
+        pdfDocRef.current = null;
+        setPdfDoc(null);
+      }
+    };
   }, [bookTitle, pdfUrl, setBookTitle, setTotalPages]);
 
   // Render current page

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import {
   Upload,
@@ -22,6 +22,8 @@ import {
 import { useReaderStore, ReadingMode } from "@/lib/store";
 import { useNotesStore } from "@/lib/notesStore";
 import { Starfield } from "./Starfield";
+import { NotionSettings } from "./NotionSettings";
+import { upload } from "@vercel/blob/client";
 
 const READING_MODES: {
   id: ReadingMode;
@@ -51,6 +53,16 @@ const READING_MODES: {
 
 const TIME_PRESETS = [15, 30, 60];
 
+const GENRE_SUGGESTIONS = [
+  "Personal",
+  "Machine Learning",
+  "Time Management",
+  "Productivity",
+  "Deep Learning",
+  "LLM",
+  "Finance",
+];
+
 type ExplorerBook = {
   id: string;
   title: string;
@@ -58,10 +70,14 @@ type ExplorerBook = {
   currentPage: number | null;
   totalPages: number | null;
   status: string | null;
+  genre: string | null;
   hasPdf: boolean;
   pdfName: string | null;
   pdfUrl: string | null;
   pdfPropertyName: string | null;
+  dailyRecommendationPages: number | null;
+  dailyRecommendationText: string | null;
+  dailyRecommendationMissingDeadline: boolean;
 };
 
 const stagger = {
@@ -84,6 +100,8 @@ export function UploadScreen() {
     setPdfUrl,
     setBookTitle,
     bookTitle,
+    bookGenre,
+    setBookGenre,
     setCurrentPage,
     setReadingMode,
     readingMode,
@@ -91,27 +109,99 @@ export function UploadScreen() {
     timer,
     toggleFocusMode,
     focusModeActive,
+    setDailyRecommendation,
+    clearDailyRecommendation,
+    setUploadedPdfUrl,
   } = useReaderStore();
   const [isDragging, setIsDragging] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
   const [fileName, setFileName] = useState<string | null>(null);
+  const objectUrlRef = useRef<string | null>(null);
 
   const handleFile = useCallback(
-    (file: File) => {
+    async (file: File) => {
       if (file.type === "application/pdf") {
         setPdfFile(file);
         setBookTitle(null);
+        setBookGenre(null);
         setCurrentPage(1);
         const url = URL.createObjectURL(file);
+        if (objectUrlRef.current) {
+          URL.revokeObjectURL(objectUrlRef.current);
+        }
+        objectUrlRef.current = url;
         setPdfUrl(url);
         setFileName(file.name);
+        clearDailyRecommendation();
+
+        // Delete previous upload if exists
+        const currentUploadedUrl = useReaderStore.getState().uploadedPdfUrl;
+        if (currentUploadedUrl) {
+          fetch('/api/upload', {
+            method: 'DELETE',
+            body: JSON.stringify({ url: currentUploadedUrl }),
+          }).catch(console.error);
+          setUploadedPdfUrl(null);
+        }
+
+        setIsUploading(true);
+        try {
+          const newBlob = await upload(file.name, file, {
+            access: 'public',
+            handleUploadUrl: '/api/upload',
+          });
+          setUploadedPdfUrl(newBlob.url);
+        } catch (e) {
+          console.error("Failed to upload to vercel blob", e);
+        } finally {
+          setIsUploading(false);
+        }
       }
     },
-    [setBookTitle, setCurrentPage, setPdfFile, setPdfUrl]
+    [
+      clearDailyRecommendation,
+      setBookGenre,
+      setBookTitle,
+      setCurrentPage,
+      setPdfFile,
+      setPdfUrl,
+      setUploadedPdfUrl,
+    ]
+  );
+
+  const buildFallbackRecommendation = useCallback(
+    (book: ExplorerBook) => {
+      const minutes = Math.max(5, timer.targetMinutes || 0);
+      const PAGES_PER_MINUTE = 1;
+      const estimated = Math.max(1, Math.round(minutes * PAGES_PER_MINUTE));
+
+      const current = typeof book.currentPage === "number" && book.currentPage > 0 ? book.currentPage : 1;
+      const remaining =
+        typeof book.totalPages === "number" && book.totalPages > 0
+          ? Math.max(book.totalPages - current + 1, 1)
+          : null;
+
+      const pages = remaining ? Math.min(remaining, estimated) : estimated;
+      const pageLabel = `${pages} page${pages === 1 ? "" : "s"}`;
+      const baseText = `Aim for ${pageLabel} during your ${minutes}-minute session.`;
+      const text = book.dailyRecommendationMissingDeadline
+        ? `Select a deadline in Notion for smarter pacing. ${baseText}`
+        : baseText;
+
+      return {
+        pages,
+        text,
+      };
+    },
+    [timer.targetMinutes]
   );
 
   const handleExplorerImport = useCallback(
     async (book: ExplorerBook) => {
       if (!book.pdfUrl) return;
+
+      clearDailyRecommendation();
+      setBookGenre(book.genre || null);
 
       const res = await fetch(
         `/api/notion/pdf?url=${encodeURIComponent(book.pdfUrl)}`
@@ -125,13 +215,51 @@ export function UploadScreen() {
       const file = new File([blob], fileName, { type: "application/pdf" });
       const url = URL.createObjectURL(blob);
 
+      if (objectUrlRef.current) {
+        URL.revokeObjectURL(objectUrlRef.current);
+      }
+      objectUrlRef.current = url;
+
       setPdfFile(file);
       setPdfUrl(url);
       setBookTitle(book.title);
       setFileName(fileName);
       setCurrentPage(book.currentPage && book.currentPage > 0 ? book.currentPage : 1);
+
+      if (
+        book.dailyRecommendationPages !== null &&
+        !book.dailyRecommendationMissingDeadline
+      ) {
+        const pages = book.dailyRecommendationPages;
+        const pageLabel = `${pages} page${pages === 1 ? "" : "s"}`;
+        setDailyRecommendation({
+          source: "notion",
+          pages,
+          text: `Notion recommends ${pageLabel} today.`,
+          missingDeadline: false,
+          raw: book.dailyRecommendationText,
+        });
+      } else {
+        const fallback = buildFallbackRecommendation(book);
+        setDailyRecommendation({
+          source: "fallback",
+          pages: fallback.pages,
+          text: fallback.text,
+          missingDeadline: Boolean(book.dailyRecommendationMissingDeadline),
+          raw: book.dailyRecommendationText,
+        });
+      }
     },
-    [setBookTitle, setCurrentPage, setPdfFile, setPdfUrl]
+    [
+      buildFallbackRecommendation,
+      clearDailyRecommendation,
+      setBookGenre,
+      setBookTitle,
+      setCurrentPage,
+      setDailyRecommendation,
+      setPdfFile,
+      setPdfUrl,
+    ]
   );
 
   const handleDrop = useCallback(
@@ -159,12 +287,25 @@ export function UploadScreen() {
   };
 
   const clearFile = useCallback(() => {
+    const currentUploadedUrl = useReaderStore.getState().uploadedPdfUrl;
+    if (currentUploadedUrl) {
+      fetch('/api/upload', {
+        method: 'DELETE',
+        body: JSON.stringify({ url: currentUploadedUrl }),
+      }).catch(console.error);
+      setUploadedPdfUrl(null);
+    }
     setFileName(null);
     setPdfFile(null);
     setPdfUrl(null);
     setBookTitle(null);
     setCurrentPage(1);
-  }, [setBookTitle, setCurrentPage, setPdfFile, setPdfUrl]);
+    setBookGenre(null);
+    if (objectUrlRef.current) {
+      URL.revokeObjectURL(objectUrlRef.current);
+      objectUrlRef.current = null;
+    }
+  }, [setBookGenre, setBookTitle, setCurrentPage, setPdfFile, setPdfUrl, setUploadedPdfUrl]);
 
   return (
     <div className="fixed inset-0 bg-space-deep overflow-y-auto">
@@ -259,6 +400,38 @@ export function UploadScreen() {
                         className="w-full bg-space-black/40 border border-space-border rounded-lg px-3 py-2 text-sm text-white/75 placeholder-white/25 focus:outline-none focus:border-gold-500/50 transition-colors"
                         placeholder="Rename this book"
                       />
+                    </div>
+
+                    {/* Genre Picker */}
+                    <div className="mt-3">
+                      <label className="block text-[10px] text-white/35 uppercase tracking-widest mb-1.5">
+                        Genre
+                      </label>
+                      <input
+                        value={bookGenre ?? ""}
+                        onChange={(e) => setBookGenre(e.target.value || null)}
+                        className="w-full bg-space-black/40 border border-space-border rounded-lg px-3 py-2 text-sm text-white/75 placeholder-white/25 focus:outline-none focus:border-gold-500/50 transition-colors"
+                        placeholder="e.g. Productivity"
+                      />
+                      <div className="flex flex-wrap gap-1.5 mt-2">
+                        {GENRE_SUGGESTIONS.map((g) => (
+                          <button
+                            key={g}
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setBookGenre(g);
+                            }}
+                            className={`px-2.5 py-1 rounded-lg text-[11px] font-medium transition-all duration-150 ${
+                              bookGenre === g
+                                ? "bg-gold-500/20 border border-gold-500/40 text-gold-300"
+                                : "bg-space-black/30 border border-space-border/60 text-white/40 hover:text-white/70 hover:border-white/20"
+                            }`}
+                          >
+                            {g}
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   </div>
                   <button
@@ -479,7 +652,7 @@ function NotionExplorer({
   }, []);
 
   const loadBooks = useCallback(async () => {
-    if (!notionConfig.connected || !notionConfig.token || !notionConfig.booksDatabaseId) return;
+    if (!notionConfig.connected || !notionConfig.booksDatabaseId) return;
 
     setLoading(true);
     setError(null);
@@ -489,7 +662,6 @@ function NotionExplorer({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          token: notionConfig.token,
           booksDatabaseId: notionConfig.booksDatabaseId,
         }),
       });
@@ -507,7 +679,7 @@ function NotionExplorer({
     } finally {
       setLoading(false);
     }
-  }, [notionConfig.booksDatabaseId, notionConfig.connected, notionConfig.token]);
+  }, [notionConfig.booksDatabaseId, notionConfig.connected]);
 
   const handleImport = useCallback(
     async (book: ExplorerBook) => {
@@ -640,6 +812,11 @@ function NotionExplorer({
 function NotionConnectCard() {
   const { notionConfig } = useNotesStore();
   const [mounted, setMounted] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+
+  const templateMessage = notionConfig.bookTemplateId
+    ? "New Book template will be applied automatically."
+    : "Default template (New Book) will be applied automatically.";
 
   useEffect(() => {
     setMounted(true);
@@ -663,9 +840,9 @@ function NotionConnectCard() {
     );
   }
 
-  if (notionConfig.connected) {
-    return (
-      <div className="glass-panel p-5">
+  const manageCard = (
+    <div className="glass-panel p-5">
+      <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-lg bg-green-500/15 flex items-center justify-center">
             <Check className="w-5 h-5 text-green-400" />
@@ -675,13 +852,22 @@ function NotionConnectCard() {
             <p className="text-[11px] text-white/30 mt-0.5">
               Notes will sync to your workspace
             </p>
+            <p className="text-[10px] text-white/35 mt-1">
+              {templateMessage}
+            </p>
           </div>
         </div>
+        <button
+          onClick={() => setSettingsOpen(true)}
+          className="px-3 py-1.5 rounded-lg bg-white/10 border border-space-border text-xs font-medium text-white/60 hover:text-white hover:border-gold-500/40 transition-colors"
+        >
+          Manage
+        </button>
       </div>
-    );
-  }
+    </div>
+  );
 
-  return (
+  const connectCard = (
     <div className="glass-panel p-5">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -696,12 +882,24 @@ function NotionConnectCard() {
           </div>
         </div>
         <button
-          onClick={() => { window.location.href = "/api/notion/auth"; }}
+          onClick={() => {
+            window.location.href = "/api/notion/auth";
+          }}
           className="px-3 py-1.5 rounded-lg bg-white/10 border border-space-border text-xs font-medium text-white/70 hover:text-white hover:border-gold-500/40 transition-colors"
         >
           Connect
         </button>
       </div>
+      <p className="mt-4 text-[10px] text-white/35">
+        After connecting, Infinity Reader will automatically apply your default Notion template (e.g., "New Book").
+      </p>
     </div>
+  );
+
+  return (
+    <>
+      {notionConfig.connected ? manageCard : connectCard}
+      <NotionSettings isOpen={settingsOpen} onClose={() => setSettingsOpen(false)} />
+    </>
   );
 }

@@ -17,19 +17,22 @@ import { NotionSettings } from "./NotionSettings";
 export function NotionSyncButton({ variant = "full" }: { variant?: "full" | "compact" }) {
   const { notionConfig, notes, syncStatus, setSyncStatus, setLastSyncedAt, markNotesSynced } =
     useNotesStore();
-  const { pdfFile, bookTitle, readingMode, timer, currentPage, totalPages } =
+  const { pdfFile, bookTitle, bookGenre, readingMode, timer, currentPage, totalPages, uploadedPdfUrl } =
     useReaderStore();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [syncedUrl, setSyncedUrl] = useState<string | null>(null);
+  const [syncError, setSyncError] = useState<string | null>(null);
+
+  const openSettings = () => setSettingsOpen(true);
 
   const handleSync = async () => {
+    setSyncError(null);
     if (
       !notionConfig.connected ||
-      !notionConfig.token ||
       !notionConfig.booksDatabaseId ||
       !notionConfig.notesDatabaseId
     ) {
-      setSettingsOpen(true);
+      openSettings();
       return;
     }
 
@@ -44,12 +47,14 @@ export function NotionSyncButton({ variant = "full" }: { variant?: "full" | "com
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          token: notionConfig.token,
           booksDatabaseId: notionConfig.booksDatabaseId,
           notesDatabaseId: notionConfig.notesDatabaseId,
+          bookTemplateId: notionConfig.bookTemplateId,
           session: {
             pdfName: pdfFile?.name || "Untitled PDF",
+            uploadedPdfUrl,
             bookTitle,
+            genre: bookGenre || undefined,
             readingMode,
             durationMinutes: timer.targetMinutes,
             elapsedSeconds: timer.elapsedSeconds,
@@ -74,7 +79,7 @@ export function NotionSyncButton({ variant = "full" }: { variant?: "full" | "com
       });
 
       const data = await res.json();
-      if (data.success) {
+      if (res.ok && data.success) {
         setSyncStatus("synced");
         setLastSyncedAt(Date.now());
         setSyncedUrl(data.bookUrl || null);
@@ -82,11 +87,21 @@ export function NotionSyncButton({ variant = "full" }: { variant?: "full" | "com
         if (data.syncedNoteIds) {
           markNotesSynced(data.syncedNoteIds);
         }
+        setSyncError(null);
       } else {
         setSyncStatus("error");
+        setSyncError(
+          data?.error ||
+            "Sync failed. Make sure the Infinity Reader integration has access to your Books and Notes databases."
+        );
       }
-    } catch {
+    } catch (err) {
       setSyncStatus("error");
+      setSyncError(
+        err instanceof Error
+          ? err.message
+          : "Network error while syncing to Notion. Please try again."
+      );
     }
   };
 
@@ -97,7 +112,9 @@ export function NotionSyncButton({ variant = "full" }: { variant?: "full" | "com
           onClick={handleSync}
           title={
             notionConfig.connected
-              ? "Sync to Notion"
+              ? syncStatus === "error"
+                ? syncError || "Sync failed"
+                : "Sync to Notion"
               : "Connect Notion"
           }
           className={`p-2 rounded-lg transition-colors ${
@@ -122,6 +139,15 @@ export function NotionSyncButton({ variant = "full" }: { variant?: "full" | "com
             <CloudUpload className="w-4 h-4" />
           )}
         </button>
+        {notionConfig.connected && (
+          <button
+            onClick={openSettings}
+            title="Manage Notion connection"
+            className="p-2 rounded-lg hover:bg-white/5 text-white/40 hover:text-white transition-colors"
+          >
+            <Settings className="w-4 h-4" />
+          </button>
+        )}
         <NotionSettings isOpen={settingsOpen} onClose={() => setSettingsOpen(false)} />
       </>
     );
@@ -168,6 +194,25 @@ export function NotionSyncButton({ variant = "full" }: { variant?: "full" | "com
             </>
           )}
         </button>
+
+        {notionConfig.connected && (
+          <button
+            onClick={openSettings}
+            className="w-full flex items-center justify-center gap-2 py-2 rounded-xl border border-space-border/60 text-xs text-white/50 hover:text-white hover:border-gold-500/40 transition-colors"
+          >
+            <Settings className="w-3 h-3" />
+            Manage Notion Connection
+          </button>
+        )}
+
+        {syncStatus === "error" && syncError && (
+          <div className="rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs text-red-400">
+            {syncError}
+            <span className="block mt-1 text-red-300/70">
+              Tip: If you recently duplicated or converted your Notion databases, reconnect Infinity Reader so the new database IDs are saved, and ensure the integration has been shared with both databases.
+            </span>
+          </div>
+        )}
 
         {syncStatus === "synced" && syncedUrl && (
           <motion.a

@@ -1,49 +1,54 @@
 import { NextRequest, NextResponse } from "next/server";
+import { notionFetch, NotionApiError } from "@/lib/notion-client";
+import { getTokenFromRequest } from "@/lib/notion-session";
+import type { NotionDatabase } from "@/lib/notion-types";
 
-const NOTION_VERSION = "2022-06-28";
-
-async function testDatabase(token: string, databaseId: string) {
-  const res = await fetch(
-    `https://api.notion.com/v1/databases/${databaseId}`,
-    {
-      method: "GET",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Notion-Version": NOTION_VERSION,
-        "Content-Type": "application/json",
-      },
+async function testDatabase(
+  token: string,
+  databaseId: string
+): Promise<{ success: boolean; error: string; title: string }> {
+  try {
+    const data = await notionFetch<NotionDatabase>(
+      token,
+      `/v1/databases/${databaseId}`
+    );
+    const title =
+      data.title?.map((part) => part.plain_text).join("").trim() || "Untitled";
+    return { success: true, error: "", title };
+  } catch (err) {
+    if (err instanceof NotionApiError) {
+      const message =
+        err.status === 401
+          ? "Invalid token — check your integration token"
+          : err.status === 404
+          ? "Database not found — check the ID and ensure integration has access"
+          : err.message;
+      return { success: false, error: message, title: "" };
     }
-  );
-
-  if (!res.ok) {
-    const errorData = await res.json().catch(() => ({}));
-    const message =
-      res.status === 401
-        ? "Invalid token — check your integration token"
-        : res.status === 404
-        ? "Database not found — check the ID and ensure integration has access"
-        : errorData.message || `Notion API error (${res.status})`;
-    return { success: false, error: message, title: "" };
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "Unknown error",
+      title: "",
+    };
   }
-
-  const data = await res.json();
-  return {
-    success: true,
-    error: "",
-    title: data.title?.[0]?.plain_text || "Untitled",
-  };
 }
 
 export async function POST(req: NextRequest) {
   try {
-    const { token, booksDatabaseId, notesDatabaseId } = await req.json();
-
-    if (!token || !booksDatabaseId || !notesDatabaseId) {
+    // Token from HttpOnly cookie
+    const token = getTokenFromRequest(req);
+    if (!token) {
       return NextResponse.json(
-        {
-          success: false,
-          error: "Token and both Database IDs are required",
-        },
+        { success: false, error: "Not authenticated. Please reconnect Notion." },
+        { status: 401 }
+      );
+    }
+
+    const { booksDatabaseId, notesDatabaseId } = await req.json();
+
+    if (!booksDatabaseId || !notesDatabaseId) {
+      return NextResponse.json(
+        { success: false, error: "Both Database IDs are required" },
         { status: 400 }
       );
     }
